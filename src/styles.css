@@ -66,6 +66,7 @@ body {
     border-radius: 3px;
     box-shadow: 0 1px 0 rgba(0, 0, 0, 0.2);
     cursor: grab;
+    font-size: 0.9rem;
   }
   
   /* Drag state */
@@ -78,3 +79,26 @@ body {
     background: #dfe3e6;
     border-radius: 3px;
   }
+  
+  /* Card title */
+  .card .title {
+    font-weight: bold;
+  }
+  
+  /* Card details (priority & assignee) */
+  .card .details {
+    margin-top: 4px;
+    font-size: 0.8rem;
+    color: #555;
+  }
+  
+  /* Priority badges */
+  .card .priority {
+    padding: 2px 4px;
+    border-radius: 2px;
+    color: #fff;
+    margin-right: 6px;
+  }
+  .card .priority.low { background: #5cb85c; }
+  .card .priority.medium { background: #f0ad4e; }
+  .card .priority.high { background: #d9534f; }

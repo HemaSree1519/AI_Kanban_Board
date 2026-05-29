@@ -1,11 +1,26 @@
 // File: script.js
 // Simple Kanban Board with drag‑and‑drop and column options
 
-// Column definitions
+// Column definitions – cards now carry title, priority and assignee
 const columns = [
-    { id: 'todo', title: 'To Do', cards: ['Buy groceries', 'Write blog post'] },
-    { id: 'inprogress', title: 'In Progress', cards: ['Develop feature X'] },
-    { id: 'done', title: 'Done', cards: ['Set up repo'] },
+    {
+      id: 'todo',
+      title: 'To Do',
+      cards: [
+        { title: 'Buy groceries', priority: 'Low', assignee: 'Alice' },
+        { title: 'Write blog post', priority: 'Medium', assignee: 'Bob' },
+      ],
+    },
+    {
+      id: 'inprogress',
+      title: 'In Progress',
+      cards: [{ title: 'Develop feature X', priority: 'High', assignee: 'Carol' }],
+    },
+    {
+      id: 'done',
+      title: 'Done',
+      cards: [{ title: 'Set up repo', priority: 'Low', assignee: 'Dave' }],
+    },
   ];
   
   // Reference to the root element
@@ -16,17 +31,45 @@ const columns = [
   board.className = 'board';
   app.appendChild(board);
   
-  // Helper to create a card element
-  function createCard(text) {
+  // Helper to create a card element from a card object
+  function createCard(card) {
+    // Normalise input – if a plain string is passed, treat it as a title
+    if (typeof card === 'string') {
+      card = { title: card, priority: 'Low', assignee: '' };
+    }
+  
     const li = document.createElement('li');
     li.className = 'card';
     li.draggable = true;
-    li.textContent = text;
+  
+    // Title
+    const titleDiv = document.createElement('div');
+    titleDiv.className = 'title';
+    titleDiv.textContent = card.title;
+    li.appendChild(titleDiv);
+  
+    // Details line (priority badge + assignee)
+    const detailsDiv = document.createElement('div');
+    detailsDiv.className = 'details';
+  
+    const prioritySpan = document.createElement('span');
+    prioritySpan.className = `priority ${card.priority.toLowerCase()}`;
+    prioritySpan.textContent = card.priority;
+    detailsDiv.appendChild(prioritySpan);
+  
+    const assigneeSpan = document.createElement('span');
+    assigneeSpan.textContent = card.assignee
+      ? `Assignee: ${card.assignee}`
+      : 'Unassigned';
+    detailsDiv.appendChild(assigneeSpan);
+  
+    li.appendChild(detailsDiv);
   
     // Drag events
-    li.addEventListener('dragstart', e => {
+    li.addEventListener('dragstart', (e) => {
       li.classList.add('dragging');
-      e.dataTransfer.setData('text/plain', text);
+      // Store a reference to the element being dragged
+      e.dataTransfer.setData('text/plain', 'placeholder');
     });
   
     li.addEventListener('dragend', () => {
@@ -36,15 +79,45 @@ const columns = [
     return li;
   }
   
+  // Refresh the count displayed in each column header
+  function refreshCounts() {
+    document.querySelectorAll('.column').forEach((colDiv) => {
+      const header = colDiv.querySelector('h2');
+      const list = colDiv.querySelector('ul');
+      const title = header.dataset.title;
+      header.textContent = `${title} (${list.children.length})`;
+    });
+  }
+  
+  // Prompt helpers for creating a new card
+  function promptForCard() {
+    const title = prompt('Enter card title:');
+    if (!title) return null;
+  
+    let priority = prompt(
+      'Enter priority (Low, Medium, High):',
+      'Low'
+    );
+    if (!priority) priority = 'Low';
+    priority = ['low', 'medium', 'high'].includes(priority.toLowerCase())
+      ? priority.charAt(0).toUpperCase() + priority.slice(1).toLowerCase()
+      : 'Low';
+  
+    const assignee = prompt('Enter assignee name (optional):') || '';
+  
+    return { title: title.trim(), priority, assignee: assignee.trim() };
+  }
+  
   // Build each column
-  columns.forEach(col => {
+  columns.forEach((col) => {
     const colDiv = document.createElement('div');
     colDiv.className = 'column';
     colDiv.dataset.id = col.id;
   
     // Header
     const header = document.createElement('h2');
-    header.textContent = col.title;
+    header.dataset.title = col.title; // store base title
+    header.textContent = `${col.title} (0)`; // placeholder, will be updated later
     colDiv.appendChild(header);
   
     // Action buttons (Add Card, Rename Column)
@@ -55,9 +128,10 @@ const columns = [
     addBtn.textContent = '+ Card';
     addBtn.title = 'Add a new card';
     addBtn.addEventListener('click', () => {
-      const txt = prompt('Enter card text:');
-      if (txt && txt.trim()) {
-        list.appendChild(createCard(txt.trim()));
+      const newCard = promptForCard();
+      if (newCard) {
+        list.appendChild(createCard(newCard));
+        refreshCounts();
       }
     });
   
@@ -65,9 +139,10 @@ const columns = [
     renameBtn.textContent = 'Rename';
     renameBtn.title = 'Rename this column';
     renameBtn.addEventListener('click', () => {
-      const newTitle = prompt('New column title:', header.textContent);
+      const newTitle = prompt('New column title:', header.dataset.title);
       if (newTitle && newTitle.trim()) {
-        header.textContent = newTitle.trim();
+        header.dataset.title = newTitle.trim();
+        refreshCounts();
       }
     });
   
@@ -80,7 +155,7 @@ const columns = [
     list.dataset.column = col.id;
   
     // Drop zone events
-    list.addEventListener('dragover', e => {
+    list.addEventListener('dragover', (e) => {
       e.preventDefault(); // Allow drop
       list.classList.add('drag-over');
     });
@@ -89,7 +164,7 @@ const columns = [
       list.classList.remove('drag-over');
     });
   
-    list.addEventListener('drop', e => {
+    list.addEventListener('drop', (e) => {
       e.preventDefault();
       list.classList.remove('drag-over');
   
@@ -99,19 +174,23 @@ const columns = [
         dragged.classList.remove('dragging');
         list.appendChild(dragged);
       } else {
-        // Fallback: use transferred text
+        // Fallback: create a simple card from transferred text
         const text = e.dataTransfer.getData('text/plain');
         if (text) {
-          list.appendChild(createCard(text));
+          list.appendChild(createCard({ title: text, priority: 'Low', assignee: '' }));
         }
       }
+      refreshCounts();
     });
   
     // Populate initial cards
-    col.cards.forEach(cardText => {
-      list.appendChild(createCard(cardText));
+    col.cards.forEach((cardObj) => {
+      list.appendChild(createCard(cardObj));
     });
   
     colDiv.appendChild(list);
     board.appendChild(colDiv);
   });
+  
+  // Initial count display
+  refreshCounts();
