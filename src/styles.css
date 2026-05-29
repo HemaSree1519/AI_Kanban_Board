@@ -5,5 +5,76 @@ body {
     padding: 20px;
     background: #f4f5f7;
   }
-
   
+  /* Board container */
+  .board {
+    display: flex;
+    gap: 10px;
+  }
+  
+  /* Individual column */
+  .column {
+    background: #ebecf0;
+    flex: 1;
+    padding: 10px;
+    border-radius: 3px;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  /* Column header */
+  .column h2 {
+    margin: 0 0 5px 0;
+    font-size: 1.1rem;
+    color: #333;
+  }
+  
+  /* Column actions (buttons) */
+  .column .col-actions {
+    margin-bottom: 10px;
+    display: flex;
+    gap: 5px;
+  }
+  
+  .column button {
+    background: #5aac44;
+    color: #fff;
+    border: none;
+    border-radius: 3px;
+    padding: 4px 8px;
+    font-size: 0.9rem;
+    cursor: pointer;
+  }
+  
+  .column button:hover {
+    background: #519839;
+  }
+  
+  /* Card list (ul) */
+  .column ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    flex-grow: 1;
+  }
+  
+  /* Card item */
+  .card {
+    background: #fff;
+    padding: 8px;
+    margin: 8px 0;
+    border-radius: 3px;
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.2);
+    cursor: grab;
+  }
+  
+  /* Drag state */
+  .card.dragging {
+    opacity: 0.5;
+  }
+  
+  /* Highlight drop zone */
+  .column ul.drag-over {
+    background: #dfe3e6;
+    border-radius: 3px;
+  }
