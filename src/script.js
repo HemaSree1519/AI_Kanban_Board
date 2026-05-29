@@ -1,5 +1,5 @@
 // File: script.js
-// Kanban Board with full drag‑and‑drop, card deletion, and priority filtering
+// Kanban Board with full drag‑and‑drop, card deletion, priority filtering, and global search
 
 // Column definitions – cards now carry title, priority and assignee
 const columns = [
@@ -29,16 +29,31 @@ const columns = [
   // Current priority filter ('All', 'Low', 'Medium', 'High')
   let currentFilter = 'All';
   
+  // Current search query (lower‑cased)
+  let currentSearch = '';
+  
   // Root element
   const app = document.getElementById('app');
   
   // ---------------------------------------------------------------------
-  // 1. Priority filter UI
+  // 1. UI: Filter bar (search + priority)
   // ---------------------------------------------------------------------
   function createFilterBar() {
     const bar = document.createElement('div');
     bar.className = 'filter-bar';
   
+    // ---- Search input ----
+    const searchInput = document.createElement('input');
+    searchInput.type = 'text';
+    searchInput.placeholder = 'Search title or assignee';
+    searchInput.className = 'search-input';
+    searchInput.addEventListener('input', () => {
+      currentSearch = searchInput.value.trim().toLowerCase();
+      applyFilters();
+    });
+    bar.appendChild(searchInput);
+  
+    // ---- Priority selector ----
     const label = document.createElement('label');
     label.textContent = 'Show priority:';
     label.htmlFor = 'priority-filter';
@@ -54,22 +69,25 @@ const columns = [
     });
     select.addEventListener('change', () => {
       currentFilter = select.value;
-      applyFilter();
+      applyFilters();
     });
-  
     bar.appendChild(select);
+  
     app.appendChild(bar);
   }
   
-  // Apply the current filter to all cards
-  function applyFilter() {
+  // Apply BOTH priority filter and search filter
+  function applyFilters() {
     document.querySelectorAll('.card').forEach((card) => {
-      const cardPriority = card.dataset.priority; // lower‑cased
-      if (currentFilter === 'All' || cardPriority === currentFilter.toLowerCase()) {
-        card.style.display = '';
-      } else {
-        card.style.display = 'none';
-      }
+      const priorityMatch =
+        currentFilter === 'All' ||
+        card.dataset.priority === currentFilter.toLowerCase();
+  
+      const searchMatch = !currentSearch ||
+        card.dataset.title.includes(currentSearch) ||
+        card.dataset.assignee.includes(currentSearch);
+  
+      card.style.display = priorityMatch && searchMatch ? '' : 'none';
     });
   }
   
@@ -85,8 +103,11 @@ const columns = [
     const li = document.createElement('li');
     li.className = 'card';
     li.draggable = true;
-    // Store priority in a data attribute for easy filtering
+  
+    // Store data attributes for filtering
     li.dataset.priority = card.priority.toLowerCase();
+    li.dataset.title = card.title.toLowerCase();
+    li.dataset.assignee = (card.assignee || '').toLowerCase();
   
     // Title
     const titleDiv = document.createElement('div');
@@ -203,7 +224,7 @@ const columns = [
         if (newCard) {
           list.appendChild(createCard(newCard));
           refreshCounts();
-          applyFilter(); // respect current filter
+          applyFilters(); // respect current filters
         }
       });
   
@@ -288,8 +309,8 @@ const columns = [
   
     // Initial count display
     refreshCounts();
-    // Apply default filter (All)
-    applyFilter();
+    // Apply default filters (All, empty search)
+    applyFilters();
   }
   
   // ---------------------------------------------------------------------
