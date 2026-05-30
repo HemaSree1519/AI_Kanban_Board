@@ -1,0 +1,16 @@
+The Requirements
+
+Three columns: To Do, In Progress, Done — with the ability to add more
+
+A card count on each column header
+
+Each card has a title, a priority (Low, Medium, or High), and an assignee name
+
+Cards can be moved between columns
+
+Cards can be deleted
+
+A priority filter that lets you choose which priority level to show across all columns
+
+A search bar that filters cards across the entire board by title or assignee
+
