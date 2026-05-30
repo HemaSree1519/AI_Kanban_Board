@@ -1,320 +1,353 @@
 // File: script.js
-// Kanban Board with full drag‑and‑drop, card deletion, priority filtering, and global search
+// -------------------------------------------------
+// Kanban Board – updated to keep search focus
+// -------------------------------------------------
 
-// Column definitions – cards now carry title, priority and assignee
-const columns = [
-    {
-      id: 'todo',
-      title: 'To Do',
-      cards: [
-        { title: 'Buy groceries', priority: 'Low', assignee: 'Alice' },
-        { title: 'Write blog post', priority: 'Medium', assignee: 'Bob' },
-      ],
-    },
-    {
-      id: 'inprogress',
-      title: 'In Progress',
-      cards: [{ title: 'Develop feature X', priority: 'High', assignee: 'Carol' }],
-    },
-    {
-      id: 'done',
-      title: 'Done',
-      cards: [{ title: 'Set up repo', priority: 'Low', assignee: 'Dave' }],
-    },
-  ];
+// --------------------
+// Data model
+// --------------------
+const board = {
+    columns: [
+      {
+        id: 'col-1',
+        name: 'To Do',
+        cards: [
+          {
+            id: `card-${Date.now()}-1`,
+            title: 'Design landing page',
+            priority: 'High',
+            assignee: 'Alice',
+          },
+          {
+            id: `card-${Date.now()}-2`,
+            title: 'Write project spec',
+            priority: 'Medium',
+            assignee: 'Bob',
+          },
+        ],
+      },
+      {
+        id: 'col-2',
+        name: 'In Progress',
+        cards: [
+          {
+            id: `card-${Date.now()}-3`,
+            title: 'Implement auth flow',
+            priority: 'High',
+            assignee: 'Charlie',
+          },
+        ],
+      },
+      {
+        id: 'col-3',
+        name: 'Done',
+        cards: [
+          {
+            id: `card-${Date.now()}-4`,
+            title: 'Set up CI/CD',
+            priority: 'Low',
+            assignee: 'Dana',
+          },
+        ],
+      },
+    ],
+  };
   
-  // Global reference to the card being dragged
-  let draggedCard = null;
+  let filterPriority = 'All'; // All | Low | Medium | High
+  let searchTerm = '';        // text to search (title or assignee)
   
-  // Current priority filter ('All', 'Low', 'Medium', 'High')
-  let currentFilter = 'All';
+  // --------------------
+  // Helper utilities
+  // --------------------
+  function el(tag, classNames = [], text) {
+    const element = document.createElement(tag);
+    if (classNames.length) element.classList.add(...classNames);
+    if (text !== undefined) element.textContent = text;
+    return element;
+  }
   
-  // Current search query (lower‑cased)
-  let currentSearch = '';
+  // --------------------
+  // Rendering
+  // --------------------
+  function renderHeader() {
+    const header = el('div');
+    header.id = 'board-header';
   
-  // Root element
-  const app = document.getElementById('app');
-  
-  // ---------------------------------------------------------------------
-  // 1. UI: Filter bar (search + priority)
-  // ---------------------------------------------------------------------
-  function createFilterBar() {
-    const bar = document.createElement('div');
-    bar.className = 'filter-bar';
-  
-    // ---- Search input ----
-    const searchInput = document.createElement('input');
-    searchInput.type = 'text';
-    searchInput.placeholder = 'Search title or assignee';
-    searchInput.className = 'search-input';
-    searchInput.addEventListener('input', () => {
-      currentSearch = searchInput.value.trim().toLowerCase();
-      applyFilters();
-    });
-    bar.appendChild(searchInput);
-  
-    // ---- Priority selector ----
-    const label = document.createElement('label');
-    label.textContent = 'Show priority:';
-    label.htmlFor = 'priority-filter';
-    bar.appendChild(label);
-  
-    const select = document.createElement('select');
-    select.id = 'priority-filter';
-    ['All', 'Low', 'Medium', 'High'].forEach((p) => {
-      const opt = document.createElement('option');
+    // ----- Priority filter -----
+    const prioritySelect = el('select');
+    ['All', 'Low', 'Medium', 'High'].forEach(p => {
+      const opt = el('option', [], p);
       opt.value = p;
-      opt.textContent = p;
-      select.appendChild(opt);
+      if (p === filterPriority) opt.selected = true;
+      prioritySelect.appendChild(opt);
     });
-    select.addEventListener('change', () => {
-      currentFilter = select.value;
-      applyFilters();
+    prioritySelect.addEventListener('change', e => {
+      filterPriority = e.target.value;
+      renderBoardContent();      // only the board part is refreshed
     });
-    bar.appendChild(select);
+    header.appendChild(prioritySelect);
   
-    app.appendChild(bar);
+    // ----- Search input -----
+    const searchInput = el('input');
+    searchInput.type = 'text';
+    searchInput.placeholder = 'Search cards…';
+    searchInput.value = searchTerm;
+    searchInput.addEventListener('input', e => {
+      searchTerm = e.target.value.trim().toLowerCase();
+      renderBoardContent();      // only the board part is refreshed
+    });
+    header.appendChild(searchInput);
+  
+    return header;
   }
   
-  // Apply BOTH priority filter and search filter
-  function applyFilters() {
-    document.querySelectorAll('.card').forEach((card) => {
-      const priorityMatch =
-        currentFilter === 'All' ||
-        card.dataset.priority === currentFilter.toLowerCase();
+  // Build only the board (columns, cards, add‑column button)
+  function renderBoardContent() {
+    const app = document.getElementById('app');
   
-      const searchMatch = !currentSearch ||
-        card.dataset.title.includes(currentSearch) ||
-        card.dataset.assignee.includes(currentSearch);
+    // ---- Remove old board & button if they exist ----
+    const oldBoard = document.getElementById('board');
+    if (oldBoard) oldBoard.remove();
+    const oldBtn = document.getElementById('add-column-btn');
+    if (oldBtn) oldBtn.remove();
   
-      card.style.display = priorityMatch && searchMatch ? '' : 'none';
+    // ---- Create new board container ----
+    const boardEl = el('div');
+    boardEl.id = 'board';
+  
+    board.columns.forEach(col => {
+      boardEl.appendChild(renderColumn(col));
     });
+  
+    // ---- Add‑column button ----
+    const addBtn = el('button', [], 'Add Column');
+    addBtn.id = 'add-column-btn';
+    addBtn.addEventListener('click', onAddColumn);
+  
+    // ---- Append to app (header is already present) ----
+    app.appendChild(boardEl);
+    app.appendChild(addBtn);
   }
   
-  // ---------------------------------------------------------------------
-  // Helper: create a card <li> element from a card object
-  // ---------------------------------------------------------------------
-  function createCard(card) {
-    // Normalise plain‑string input
-    if (typeof card === 'string') {
-      card = { title: card, priority: 'Low', assignee: '' };
+  // Render a column (including header, cards, add‑card button)
+  function renderColumn(column) {
+    const colDiv = el('div', ['column']);
+    colDiv.dataset.id = column.id;
+  
+    // Header
+    const header = el('div', ['column-header']);
+    const title = el('span', [], `${column.name} (${column.cards.length})`);
+    title.title = 'Double‑click to rename column';
+    title.addEventListener('dblclick', () => {
+      const newName = prompt('Rename column:', column.name);
+      if (newName === null) return;
+      const trimmed = newName.trim();
+      if (!trimmed) {
+        alert('Column name cannot be empty.');
+        return;
+      }
+      column.name = trimmed;
+      renderBoardContent();
+    });
+    header.appendChild(title);
+  
+    const delBtn = el('button', ['col-delete-btn'], '✕');
+    delBtn.title = 'Delete column';
+    delBtn.addEventListener('click', onDeleteColumn);
+    header.appendChild(delBtn);
+    colDiv.appendChild(header);
+  
+    // Cards container
+    const cardsContainer = el('div', ['cards']);
+    cardsContainer.dataset.columnId = column.id;
+    cardsContainer.addEventListener('dragover', onCardDragOver);
+    cardsContainer.addEventListener('drop', onCardDrop);
+  
+    // Apply filtering
+    const filtered = column.cards.filter(card => {
+      const matchesPriority = filterPriority === 'All' || card.priority === filterPriority;
+      const matchesSearch = !searchTerm ||
+        card.title.toLowerCase().includes(searchTerm) ||
+        card.assignee.toLowerCase().includes(searchTerm);
+      return matchesPriority && matchesSearch;
+    });
+  
+    filtered.forEach(card => cardsContainer.appendChild(renderCard(card, column.id)));
+  
+    // Placeholder when nothing matches
+    if (filtered.length === 0) {
+      const placeholder = el('div', ['no-cards'], 'No cards');
+      cardsContainer.appendChild(placeholder);
     }
   
-    const li = document.createElement('li');
-    li.className = 'card';
-    li.draggable = true;
+    colDiv.appendChild(cardsContainer);
   
-    // Store data attributes for filtering
-    li.dataset.priority = card.priority.toLowerCase();
-    li.dataset.title = card.title.toLowerCase();
-    li.dataset.assignee = (card.assignee || '').toLowerCase();
+    // Add‑card button
+    const addCardBtn = el('button', ['add-card-btn'], '+ Add Card');
+    addCardBtn.dataset.columnId = column.id;
+    addCardBtn.addEventListener('click', onAddCard);
+    colDiv.appendChild(addCardBtn);
   
-    // Title
-    const titleDiv = document.createElement('div');
-    titleDiv.className = 'title';
-    titleDiv.textContent = card.title;
-    li.appendChild(titleDiv);
+    return colDiv;
+  }
   
-    // Details (priority badge + assignee)
-    const detailsDiv = document.createElement('div');
-    detailsDiv.className = 'details';
-  
-    const prioritySpan = document.createElement('span');
-    prioritySpan.className = `priority ${card.priority.toLowerCase()}`;
-    prioritySpan.textContent = card.priority;
-    detailsDiv.appendChild(prioritySpan);
-  
-    const assigneeSpan = document.createElement('span');
-    assigneeSpan.textContent = card.assignee
-      ? `Assignee: ${card.assignee}`
-      : 'Unassigned';
-    detailsDiv.appendChild(assigneeSpan);
-  
-    li.appendChild(detailsDiv);
+  // Render a single card element
+  function renderCard(card, columnId) {
+    const cardDiv = el('div', ['card']);
+    cardDiv.dataset.id = card.id;
+    cardDiv.dataset.columnId = columnId;
+    cardDiv.draggable = true;
+    cardDiv.addEventListener('dragstart', onCardDragStart);
+    cardDiv.addEventListener('dragend', onCardDragEnd);
   
     // Delete button
-    const deleteBtn = document.createElement('button');
-    deleteBtn.className = 'delete-btn';
-    deleteBtn.title = 'Delete this card';
-    deleteBtn.textContent = '✕';
-    deleteBtn.addEventListener('click', (e) => {
-      e.stopPropagation(); // Prevent drag start
-      li.remove();
-      refreshCounts();
-    });
-    li.appendChild(deleteBtn);
+    const delBtn = el('button', ['delete-card'], '✕');
+    delBtn.title = 'Delete card';
+    delBtn.addEventListener('click', onDeleteCard);
+    cardDiv.appendChild(delBtn);
   
-    // Drag events -------------------------------------------------------
-    li.addEventListener('dragstart', (e) => {
-      draggedCard = li;
-      li.classList.add('dragging');
-      // Required for Firefox – set some data
-      e.dataTransfer.setData('text/plain', li.textContent);
-      e.dataTransfer.effectAllowed = 'move';
-    });
+    // Priority badge
+    const badge = el('span', ['priority-badge'], card.priority);
+    badge.classList.add(`priority-${card.priority.toLowerCase()}`);
+    cardDiv.appendChild(badge);
   
-    li.addEventListener('dragend', () => {
-      li.classList.remove('dragging');
-      draggedCard = null;
-    });
+    // Title
+    const title = el('div', ['card-title'], card.title);
+    cardDiv.appendChild(title);
   
-    return li;
+    // Assignee
+    const assignee = el('div', ['card-assignee'], `🧑 ${card.assignee}`);
+    cardDiv.appendChild(assignee);
+  
+    return cardDiv;
   }
   
-  // ---------------------------------------------------------------------
-  // Update column header counts
-  // ---------------------------------------------------------------------
-  function refreshCounts() {
-    document.querySelectorAll('.column').forEach((colDiv) => {
-      const header = colDiv.querySelector('h2');
-      const list = colDiv.querySelector('ul');
-      const title = header.dataset.title;
-      header.textContent = `${title} (${list.children.length})`;
-    });
+  // --------------------
+  // Event Handlers
+  // --------------------
+  function onAddColumn() {
+    const name = prompt('Enter column name:', 'New Column');
+    if (name === null) return;
+    const trimmed = name.trim();
+    if (!trimmed) {
+      alert('Column name cannot be empty.');
+      return;
+    }
+    const newId = `col-${Date.now()}`;
+    board.columns.push({ id: newId, name: trimmed, cards: [] });
+    renderBoardContent();
   }
   
-  // ---------------------------------------------------------------------
-  // Prompt helpers for new cards
-  // ---------------------------------------------------------------------
-  function promptForCard() {
-    const title = prompt('Enter card title:');
-    if (!title) return null;
+  function onDeleteColumn(event) {
+    const colDiv = event.target.closest('.column');
+    const colId = colDiv.dataset.id;
   
-    let priority = prompt('Enter priority (Low, Medium, High):', 'Low');
-    if (!priority) priority = 'Low';
-    priority = ['low', 'medium', 'high'].includes(priority.toLowerCase())
-      ? priority.charAt(0).toUpperCase() + priority.slice(1).toLowerCase()
-      : 'Low';
+    if (board.columns.length === 1) {
+      alert('At least one column must remain on the board.');
+      return;
+    }
+    if (!confirm(`Delete column "${colDiv.querySelector('span').textContent}"?`)) return;
   
-    const assignee = prompt('Enter assignee name (optional):') || '';
-  
-    return { title: title.trim(), priority, assignee: assignee.trim() };
+    board.columns = board.columns.filter(c => c.id !== colId);
+    renderBoardContent();
   }
   
-  // ---------------------------------------------------------------------
-  // Build columns
-  // ---------------------------------------------------------------------
-  function buildBoard() {
-    // Board container
-    const board = document.createElement('div');
-    board.className = 'board';
-    app.appendChild(board);
+  function onAddCard(event) {
+    const columnId = event.target.dataset.columnId;
+    const column = board.columns.find(c => c.id === columnId);
+    if (!column) return;
   
-    columns.forEach((col) => {
-      // Column container
-      const colDiv = document.createElement('div');
-      colDiv.className = 'column';
-      colDiv.dataset.id = col.id;
+    const title = prompt('Card title:');
+    if (title === null) return;
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) {
+      alert('Title cannot be empty.');
+      return;
+    }
   
-      // Header with data-title for easy count updates
-      const header = document.createElement('h2');
-      header.dataset.title = col.title;
-      header.textContent = `${col.title} (0)`;
-      colDiv.appendChild(header);
+    const priority = prompt('Priority (Low, Medium, High):', 'Low');
+    if (priority === null) return;
+    const prio = priority.trim().charAt(0).toUpperCase() + priority.trim().slice(1).toLowerCase();
+    if (!['Low', 'Medium', 'High'].includes(prio)) {
+      alert('Invalid priority.');
+      return;
+    }
   
-      // Action buttons (Add Card, Rename Column)
-      const actionsDiv = document.createElement('div');
-      actionsDiv.className = 'col-actions';
+    const assignee = prompt('Assignee name:') || 'Unassigned';
   
-      const addBtn = document.createElement('button');
-      addBtn.textContent = '+ Card';
-      addBtn.title = 'Add a new card';
-      addBtn.addEventListener('click', () => {
-        const newCard = promptForCard();
-        if (newCard) {
-          list.appendChild(createCard(newCard));
-          refreshCounts();
-          applyFilters(); // respect current filters
-        }
-      });
-  
-      const renameBtn = document.createElement('button');
-      renameBtn.textContent = 'Rename';
-      renameBtn.title = 'Rename this column';
-      renameBtn.addEventListener('click', () => {
-        const newTitle = prompt('New column title:', header.dataset.title);
-        if (newTitle && newTitle.trim()) {
-          header.dataset.title = newTitle.trim();
-          refreshCounts();
-        }
-      });
-  
-      actionsDiv.append(addBtn, renameBtn);
-      colDiv.appendChild(actionsDiv);
-  
-      // Card list (ul)
-      const list = document.createElement('ul');
-      list.dataset.column = col.id;
-  
-      // ---------------------- Drag‑and‑Drop for the list -----------------
-      list.addEventListener('dragover', (e) => {
-        e.preventDefault(); // Allow drop
-        list.classList.add('drag-over');
-  
-        // Find the closest card below the pointer
-        const afterElement = getDragAfterElement(list, e.clientY);
-        const dragging = document.querySelector('.card.dragging');
-  
-        if (dragging) {
-          if (afterElement == null) {
-            list.appendChild(dragging);
-          } else {
-            list.insertBefore(dragging, afterElement);
-          }
-        }
-      });
-  
-      list.addEventListener('dragleave', () => {
-        list.classList.remove('drag-over');
-      });
-  
-      list.addEventListener('drop', (e) => {
-        e.preventDefault();
-        list.classList.remove('drag-over');
-  
-        // If drop occurs on empty list (no card under cursor)
-        if (draggedCard && draggedCard.parentElement !== list) {
-          list.appendChild(draggedCard);
-        }
-  
-        refreshCounts();
-      });
-  
-      // Helper: find element after which the dragged card should be inserted
-      function getDragAfterElement(container, y) {
-        const draggableElements = [...container.querySelectorAll('.card:not(.dragging)')];
-  
-        return draggableElements.reduce(
-          (closest, child) => {
-            const box = child.getBoundingClientRect();
-            const offset = y - box.top - box.height / 2;
-            if (offset < 0 && offset > closest.offset) {
-              return { offset, element: child };
-            } else {
-              return closest;
-            }
-          },
-          { offset: Number.NEGATIVE_INFINITY }
-        ).element;
-      }
-  
-      // Populate initial cards
-      col.cards.forEach((cardObj) => {
-        list.appendChild(createCard(cardObj));
-      });
-  
-      colDiv.appendChild(list);
-      board.appendChild(colDiv);
-    });
-  
-    // Initial count display
-    refreshCounts();
-    // Apply default filters (All, empty search)
-    applyFilters();
+    const newCard = {
+      id: `card-${Date.now()}`,
+      title: trimmedTitle,
+      priority: prio,
+      assignee: assignee.trim() || 'Unassigned',
+    };
+    column.cards.push(newCard);
+    renderBoardContent();
   }
   
-  // ---------------------------------------------------------------------
-  // Initialise app
-  // ---------------------------------------------------------------------
-  createFilterBar();
-  buildBoard();
+  // Card drag‑and‑drop
+  let draggingCard = null;
+  
+  function onCardDragStart(e) {
+    draggingCard = e.target;
+    e.dataTransfer.setData('text/plain', draggingCard.dataset.id);
+    setTimeout(() => draggingCard.classList.add('dragging'), 0);
+  }
+  function onCardDragEnd() {
+    if (draggingCard) draggingCard.classList.remove('dragging');
+    draggingCard = null;
+  }
+  function onCardDragOver(e) {
+    e.preventDefault(); // allow drop
+  }
+  function onCardDrop(e) {
+    e.preventDefault();
+    const targetContainer = e.currentTarget;
+    const destColumnId = targetContainer.dataset.columnId;
+    if (!draggingCard) return;
+  
+    const srcColumnId = draggingCard.dataset.columnId;
+    if (srcColumnId === destColumnId) {
+      // same column – simple visual reorder
+      targetContainer.appendChild(draggingCard);
+      return;
+    }
+  
+    const srcCol = board.columns.find(c => c.id === srcColumnId);
+    const destCol = board.columns.find(c => c.id === destColumnId);
+    if (!srcCol || !destCol) {
+      alert('Cannot move card: source or destination column no longer exists.');
+      return;
+    }
+    const cardId = draggingCard.dataset.id;
+    const idx = srcCol.cards.findIndex(c => c.id === cardId);
+    const [card] = srcCol.cards.splice(idx, 1);
+    destCol.cards.push(card);
+  
+    renderBoardContent();
+  }
+  
+  // Delete card
+  function onDeleteCard(event) {
+    const cardDiv = event.target.closest('.card');
+    const columnId = cardDiv.dataset.columnId;
+    const cardId = cardDiv.dataset.id;
+  
+    const column = board.columns.find(c => c.id === columnId);
+    column.cards = column.cards.filter(c => c.id !== cardId);
+    renderBoardContent();
+  }
+  
+  // --------------------
+  // Initialisation
+  // --------------------
+  function initApp() {
+    const app = document.getElementById('app');
+    // Header (filters + search) – rendered once and kept alive
+    app.appendChild(renderHeader());
+    // Board area – will be refreshed on each interaction
+    renderBoardContent();
+  }
+  
+  // Kick‑off
+  initApp();
